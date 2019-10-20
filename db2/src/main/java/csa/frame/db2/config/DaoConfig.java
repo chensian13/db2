@@ -9,6 +9,7 @@ import java.sql.ResultSet;
 
 import csa.frame.db2.annotation.SQL;
 import csa.frame.db2.app.ConnectionStore;
+import csa.frame.db2.app.WrapResultListener;
 import csa.frame.db2.constant.ExecuteType;
 import csa.frame.db2.exception.DBSqlSessionException;
 import csa.frame.db2.template.Beanhandler;
@@ -52,7 +53,7 @@ public class DaoConfig implements InvocationHandler{
 		if(sql==null){
 			return null;
 		}
-		//获取连接
+		//获取该线程的连接
 		conn=ConnectionStore.getConnection();
 		//数据库连接没有获取
 		if(conn==null){
@@ -62,6 +63,7 @@ public class DaoConfig implements InvocationHandler{
 		try{
 			//初始化结果集封装对象
 			final Beanhandler beanhandler=new Beanhandler();
+			//注册返回类型
 			beanhandler.setType(method.getReturnType());
 			//注册连接,如果当前线程连接资源为空，则重新获取
 			jdbcTemplate.setConnection(conn);
@@ -70,13 +72,19 @@ public class DaoConfig implements InvocationHandler{
 					if(ExecuteType.SELECT.equals(sql.type())){
 						//查询
 						rs=ps.executeQuery();
-						//封装结果
-						JdbcTemplate.wrapResult(beanhandler,sql.resultType(), rs);
+						//封装查询结果
+						if(args==null || args.length==0 || 
+								!(args[args.length-1] instanceof WrapResultListener)){
+							//框架自动封装参数
+							beanhandler.wrapResult(sql.resultType(), rs);
+						}else{
+							//用户自定义封装参数
+							WrapResultListener listener=(WrapResultListener)args[args.length-1];
+							listener.wrapResult(beanhandler, rs);
+						}
 					}else{
 						//更新
-						if(method.getReturnType()!=void.class){
-							beanhandler.setCount(ps.executeUpdate());
-						}
+						beanhandler.setCount(ps.executeUpdate());
 					} //end else
 				} //end
 			},args);
@@ -86,9 +94,7 @@ public class DaoConfig implements InvocationHandler{
 			}else if(beanhandler.getType()==Beanhandler.TYPE_BEAN){
 				return beanhandler.getBean();
 			}else if(beanhandler.getType()==Beanhandler.TYPE_COUNT){
-				if(beanhandler.getType()!=Beanhandler.TYPE_VOID){
-					return TypeHelper.castNumber(beanhandler.getCount(),method.getReturnType());
-				}
+				return TypeHelper.castNumber(beanhandler.getCount(),method.getReturnType());
 			}
 		}catch(Exception e){
 			//打印异常

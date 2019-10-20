@@ -13,7 +13,6 @@ public class SqlSessionFactory{
 	 * @return
 	 */
 	public static SqlSession openSqlSession(){
-		ConnectionStore.registerConnection();
 		return new SqlSession();
 	}
 	
